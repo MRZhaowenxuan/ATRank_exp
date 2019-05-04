@@ -10,7 +10,7 @@ def to_df(file_path):
       # print("第%d条"%i)
       # print(df[i])
       i += 1
-      if i == 50000:
+      if i == 10000:
         break
 
     # print("df：")

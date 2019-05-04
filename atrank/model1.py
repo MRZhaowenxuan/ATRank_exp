@@ -29,9 +29,11 @@ class Model(object):
 
         # [B, T] user's history item id
         self.hist_i = tf.placeholder(tf.int32, [None, None])
+        self.fut_i = tf.placeholder(tf.int32, [None, None])
 
         # [B, T] user's history item purchase time
         self.hist_t = tf.placeholder(tf.int32, [None, None])
+        self.fut_t = tf.placeholder(tf.int32, [None, None])
 
         # [B] valid length of `hist_i`
         self.sl = tf.placeholder(tf.int32, [None, ])
@@ -71,16 +73,28 @@ class Model(object):
             tf.nn.embedding_lookup(cate_emb_w, tf.gather(cate_list, self.hist_i)),
         ], 2)
 
+        f_emb = tf.concat([
+            tf.nn.embedding_lookup(item_emb_w, self.fut_i),
+            tf.nn.embedding_lookup(cate_emb_w, tf.gather(cate_list, self.fut_i)),
+        ], 2)
+
 
         if self.config['concat_time_emb'] == True:
             t_emb = tf.one_hot(self.hist_t, 12, dtype=tf.float32)
+            ft_emb = tf.one_hot(self.fut_t, 12, dtype=tf.float32)
             h_emb = tf.concat([h_emb, t_emb], -1)
+            f_emb = tf.concat([f_emb, ft_emb], -1)
             h_emb = tf.layers.dense(h_emb, self.config['hidden_units'])
+            f_emb = tf.layers.dense(f_emb, self.config['hidden_units'])
         else:
             t_emb = tf.layers.dense(tf.expand_dims(self.hist_t, -1),
                                     self.config['hidden_units'],
                                     activation=tf.nn.tanh)
+            ft_emb = tf.layers.dense(tf.expand_dims(self.fut_t, -1),
+                                    self.config['hidden_units'],
+                                    activation=tf.nn.tanh)
             h_emb += t_emb
+            f_emb += ft_emb
 
         num_blocks = self.config['num_blocks']
         num_heads = self.config['num_heads']
@@ -88,7 +102,7 @@ class Model(object):
         num_units = h_emb.get_shape().as_list()[-1]
         #print(h_emb)
         #print(i_emb)
-        u_emb, self.att, self.stt = attention_net(
+        ltr_emb, self.att, self.stt = attention_net(
             h_emb,
             self.sl,
             i_emb,
@@ -99,6 +113,18 @@ class Model(object):
             self.is_training,
             False)
 
+        rtl_emb, self.att, self.stt = attention_net(
+            f_emb,
+            self.sl,
+            i_emb,
+            num_units,
+            num_heads,
+            num_blocks,
+            dropout_rate,
+            self.is_training,
+            False)
+
+        u_emb = tf.concat([ltr_emb, rtl_emb], 1)
 
         self.logits = i_b + tf.reduce_sum(tf.multiply(u_emb, i_emb), 1)
 
@@ -170,6 +196,8 @@ class Model(object):
             self.sl: uij[5],
             self.lr: l,
             self.is_training: True,
+            self.fut_i: uij[6],
+            self.fut_t: uij[7],
         }
 
         output_feed = [self.loss, self.train_op]

@@ -21,6 +21,11 @@ def proc_time_emb(hist_t, cur_t):
   hist_t = [np.sum(i >= gap) for i in hist_t]
   return hist_t
 
+def proc_time(cur_t,fut_t):
+  fut_t = [i - cur_t + 1 for i in fut_t]
+  fut_t = [np.sum(i >= gap) for i in fut_t]
+  return fut_t
+
 train_set = []
 test_set = []
 # print(reviews_df)
@@ -41,11 +46,15 @@ for reviewerID, hist in reviews_df.groupby('reviewerID'):
   for i in range(1, len(pos_list)):
     hist_i = pos_list[:i]
     hist_t = proc_time_emb(tim_list[:i], tim_list[i])
+    fut_t = proc_time(tim_list[i],tim_list[i+1:len(tim_list)])
     if i != len(pos_list) - 1:
-      train_set.append((reviewerID, hist_i, hist_t, pos_list[i], 1))
-      train_set.append((reviewerID, hist_i, hist_t, neg_list[i], 0))
+      fut_list = pos_list[i+1:len(pos_list)]
+      fut_neg_list = neg_list[i+1:len(neg_list)]
+      train_set.append((reviewerID, hist_i, hist_t, pos_list[i], 1,fut_list,fut_t))
+      train_set.append((reviewerID, hist_i, hist_t, neg_list[i], 0,fut_neg_list,fut_t))
     else:
       label = (pos_list[i], neg_list[i])
+
       test_set.append((reviewerID, hist_i, hist_t, label))
 
 random.shuffle(train_set)
@@ -54,7 +63,8 @@ random.shuffle(test_set)
 #print(test_set)
 #assert len(test_set) == user_count
 #assert(len(test_set) + len(train_set) // 2 == reviews_df.shape[0])
-
+# print(train_set[100])
+# print(test_set[150])
 with open('dataset.pkl', 'wb') as f:
   pickle.dump(train_set, f, pickle.HIGHEST_PROTOCOL)
   pickle.dump(test_set, f, pickle.HIGHEST_PROTOCOL)
